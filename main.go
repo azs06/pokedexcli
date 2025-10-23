@@ -93,6 +93,35 @@ func cleanInput(text string) []string {
 	return words
 }
 
+func fetchData(url string, c *config) ([]byte, error) {
+	if strings.TrimSpace(url) == "" {
+		return []byte{}, errors.New("Invalid input")
+	}
+
+	decodedData, ok := c.Cache.Get(url)
+	if ok {
+		return decodedData, nil
+	}
+
+	res, err := http.Get(url)
+	if err != nil {
+		return []byte{}, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		return []byte{}, fmt.Errorf("failed to fetch data: %s", res.Status)
+	}
+
+	decodedData, err = io.ReadAll(res.Body)
+	c.Cache.Add(url, decodedData)
+
+	if err != nil {
+		return []byte{}, err
+	}
+	return decodedData, nil
+}
+
 func commandExit(c *config, args ...string) error {
 	fmt.Print("Closing the Pokedex... Goodbye!")
 	os.Exit(0)
@@ -109,32 +138,7 @@ func commandHelp(c *config, args ...string) error {
 
 func fetchLocationDetails(url string, c *config) (LocationDetailsResponse, error) {
 	response := LocationDetailsResponse{}
-	decodedData := []byte{}
-	if strings.TrimSpace(url) == "" {
-		return response, nil
-	}
-
-	decodedData, ok := c.Cache.Get(url)
-	if ok {
-		err := json.Unmarshal(decodedData, &response)
-		if err != nil {
-			return response, nil
-		}
-		return response, nil
-	}
-
-	res, err := http.Get(url)
-	if err != nil {
-		return response, err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return response, fmt.Errorf("failed to fetch data: %s", res.Status)
-	}
-
-	decodedData, err = io.ReadAll(res.Body)
-	c.Cache.Add(url, decodedData)
+	decodedData, err := fetchData(url, c)
 
 	if err != nil {
 		return response, err
@@ -171,7 +175,7 @@ func commandMap(c *config, args ...string) error {
 	if c.Next != "" {
 		mapUrl = c.Next
 	}
-	err, response := fetchLocations(mapUrl, c)
+	response, err := fetchLocations(mapUrl, c)
 
 	if err != nil {
 		return err
@@ -188,75 +192,21 @@ func commandMap(c *config, args ...string) error {
 	return nil
 }
 
-func fetchData(url string, c *config) ([]byte, error) {
-	if strings.TrimSpace(url) == "" {
-		return []byte{}, errors.New("Invalid input")
-	}
-
-	decodedData, ok := c.Cache.Get(url)
-	if ok {
-		return []byte{}, nil
-	}
-
-	res, err := http.Get(url)
-	if err != nil {
-		return []byte{}, err
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return []byte{}, fmt.Errorf("failed to fetch data: %s", res.Status)
-	}
-
-	decodedData, err = io.ReadAll(res.Body)
-	c.Cache.Add(url, decodedData)
-
-	if err != nil {
-		return []byte{}, err
-	}
-	return decodedData, nil
-}
-
-func fetchLocations(url string, c *config) (error, LocationResponse) {
+func fetchLocations(url string, c *config) (LocationResponse, error) {
 	response := LocationResponse{}
-	decodedData := []byte{}
-	if strings.TrimSpace(url) == "" {
-		return errors.New("Invalid input"), response
-	}
-
-	decodedData, ok := c.Cache.Get(url)
-	if ok {
-		err := json.Unmarshal(decodedData, &response)
-		if err != nil {
-			return err, response
-		}
-		return nil, response
-	}
-
-	res, err := http.Get(url)
-	if err != nil {
-		return err, response
-	}
-	defer res.Body.Close()
-
-	if res.StatusCode != http.StatusOK {
-		return fmt.Errorf("failed to fetch data: %s", res.Status), response
-	}
-
-	decodedData, err = io.ReadAll(res.Body)
-	c.Cache.Add(url, decodedData)
+	decodedData, err := fetchData(url, c)
 
 	if err != nil {
-		return err, response
+		return response, err
 	}
 
 	err = json.Unmarshal(decodedData, &response)
 
 	if err != nil {
-		return err, response
+		return response, err
 	}
 
-	return nil, response
+	return response, nil
 }
 
 func commandPrevMap(c *config, args ...string) error {
@@ -269,7 +219,7 @@ func commandPrevMap(c *config, args ...string) error {
 	} else {
 		mapUrl = c.Previous
 	}
-	err, response := fetchLocations(mapUrl, c)
+	response, err := fetchLocations(mapUrl, c)
 
 	if err != nil {
 		return err
