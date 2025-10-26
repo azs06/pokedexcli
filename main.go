@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"strings"
@@ -52,11 +53,35 @@ type LocationDetailsResponse struct {
 	PokemonEncounters []PokemonEncounter `json:"pokemon_encounters"`
 }
 
-type Response interface {
-	LocationResponse | LocationDetailsResponse
+type Stat struct {
+	Name string `json:"name"`
+	Url  string `json:"url"`
+}
+type StatDetail struct {
+	BaseStat int  `json:"base_stat"`
+	Stat     Stat `json:"stat"`
+}
+
+type Type struct {
+	Name string `json:"name"`
+	Url  string `json:"url"`
+}
+
+type TypeDetails struct {
+	Slot int  `json:"slot"`
+	Type Type `json:"type"`
+}
+type PokemonType struct {
+	Name           string        `json:"name"`
+	Height         int           `json:"height"`
+	Weight         int           `json:"weight"`
+	Stats          []StatDetail  `json:"stats"`
+	Types          []TypeDetails `json:"types"`
+	BaseExperience int           `json:"base_experience"`
 }
 
 var apiUrl = "https://pokeapi.co/api/v2/"
+var pokeDex = map[string]PokemonType{}
 
 var commands = map[string]cliCommand{
 	"exit": {
@@ -84,6 +109,39 @@ var commands = map[string]cliCommand{
 		description: "Explore a location",
 		callback:    commandExplore,
 	},
+	"catch": {
+		name:        "catch",
+		description: "Catch a pokemon",
+		callback:    commandCatch,
+	},
+	"inspect": {
+		name:        "inspect",
+		description: "Inspect a caught pokemon",
+		callback:    commandInspect,
+	},
+	"pokedex": {
+		name:        "pokedex",
+		description: "View your pokedex",
+		callback:    commandPokedex,
+	},
+}
+
+func commandPokedex(c *config, args ...string) error {
+
+	fmt.Println("Your Pokedex:")
+
+	for k := range pokeDex {
+		fmt.Print(" - ")
+		fmt.Println(k)
+	}
+
+	return nil
+}
+
+func commandCatch(c *config, args ...string) error {
+	toCatch := args[0]
+	catchPokemon(toCatch, c)
+	return nil
 }
 
 func cleanInput(text string) []string {
@@ -91,6 +149,37 @@ func cleanInput(text string) []string {
 	text = strings.ToLower(text)   // normalize case
 	words := strings.Fields(text)  // split by any whitespace, ignoring multiples
 	return words
+}
+
+func catchPokemon(p string, c *config) error {
+	printMsg := fmt.Sprintf("Throwing a Pokeball at %s...", p)
+	fmt.Println(printMsg)
+	response := PokemonType{}
+	url := c.Url + "pokemon/" + p
+
+	decodedData, err := fetchData(url, c)
+	if err != nil {
+		fmt.Println("failed to catch", err)
+		return err
+	}
+	err = json.Unmarshal(decodedData, &response)
+
+	if err != nil {
+		fmt.Println(err)
+		return err
+	}
+
+	baseExperience := response.BaseExperience
+	chance := rand.IntN(baseExperience)
+	willGotCaught := baseExperience - chance
+
+	if willGotCaught > baseExperience/2 {
+		fmt.Println(p + " was caught")
+		pokeDex[p] = response
+	} else {
+		fmt.Println(p + " escaped")
+	}
+	return nil
 }
 
 func fetchData(url string, c *config) ([]byte, error) {
@@ -231,6 +320,32 @@ func commandPrevMap(c *config, args ...string) error {
 
 	for _, location := range locations {
 		fmt.Println(location.Name)
+	}
+
+	return nil
+}
+
+func commandInspect(c *config, args ...string) error {
+	pokemonName := args[0]
+	pokemon, exists := pokeDex[pokemonName]
+	if !exists {
+		fmt.Println("You haven't caught", pokemonName)
+		return nil
+	}
+
+	fmt.Printf("Details of %s:\n", pokemonName)
+	fmt.Printf("Height: %d\n", pokemon.Height)
+	fmt.Printf("Weight: %d\n", pokemon.Weight)
+	fmt.Printf("Base Experience: %d\n", pokemon.BaseExperience)
+
+	fmt.Println("Types:")
+	for _, t := range pokemon.Types {
+		fmt.Printf("- %s (Slot %d)\n", t.Type.Name, t.Slot)
+	}
+
+	fmt.Println("Stats:")
+	for _, s := range pokemon.Stats {
+		fmt.Printf("- %s: %d\n", s.Stat.Name, s.BaseStat)
 	}
 
 	return nil
