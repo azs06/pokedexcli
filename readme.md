@@ -44,3 +44,4 @@ Then run it with:
 - [ ] Use the PokeAPI to make exploration more interesting. For example, rather than typing the names of areas, maybe you are given choices of areas and just type "left" or "right"
 - [ ] Random encounters with wild pokemon
 - [ ] Adding support for different types of balls (Pokeballs, Great Balls, Ultra Balls, etc), which have different chances of catching pokemon
+å
